@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>고요 — 나만의 자연 힐링 BGM 믹서</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@300;400;600&family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --accent:#8FAE7A;
+    --accent-soft:#DCE8CE;
+    --bg-a:#EFEAD6; --bg-b:#CFE0BE; --bg-c:#9CC69A;
+    --ink:#F7F5EE;
+    --ink-dim:#CFCBBE;
+    --panel:rgba(24,26,20,0.38);
+    --panel-strong:rgba(18,20,16,0.55);
+    --line:rgba(247,245,238,0.18);
+    --radius:18px;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    font-family:'Noto Sans KR', sans-serif;
+    color:var(--ink);
+    overflow:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+  button{font-family:inherit; cursor:pointer;}
+  input[type="text"]{font-family:inherit;}
+
+  /* ---------- 배경 레이어 ---------- */
+  #bgLayer{
+    position:fixed; inset:0; z-index:0;
+    background-image: linear-gradient(155deg, var(--bg-a) 0%, var(--bg-b) 48%, var(--bg-c) 100%);
+    background-size:cover; background-position:center;
+    transition: background-image .6s ease, filter .4s ease;
+    filter: blur(0px);
+  }
+  #dimOverlay{
+    position:fixed; inset:0; z-index:1;
+    background:#0a0b08; opacity:0.32;
+    transition: opacity .5s ease;
+    pointer-events:none;
+  }
+  #sleepOverlay{
+    position:fixed; inset:0; z-index:2;
+    background:#000; opacity:0;
+    transition: opacity 1.2s ease;
+    pointer-events:none;
+  }
+  body.sleep #sleepOverlay{ opacity:0.55; }
+
+  /* ---------- 시작 게이트 ---------- */
+  #startGate{
+    position:fixed; inset:0; z-index:50;
+    display:flex; align-items:center; justify-content:center; flex-direction:column;
+    background: linear-gradient(155deg, var(--bg-a) 0%, var(--bg-b) 48%, var(--bg-c) 100%);
+    transition: opacity .9s ease;
+    text-align:center; padding:24px;
+  }
+  #startGate h1{
+    font-family:'Noto Serif KR', serif;
+    font-weight:300; font-size:clamp(28px,5vw,44px);
+    letter-spacing:0.02em;
+    margin:0 0 10px;
+    color:#20261c;
+  }
+  #startGate p{
+    font-size:14px; color:#3c4434; margin:0 0 34px; letter-spacing:.02em;
+  }
+  #startBtn{
+    width:150px; height:150px; border-radius:50%;
+    border:1px solid rgba(32,38,28,0.35);
+    background:rgba(255,255,255,0.28);
+    color:#20261c; font-size:16px; letter-spacing:.05em;
+    backdrop-filter: blur(6px);
+    transition: transform .35s ease, background .35s ease;
+  }
+  #startBtn:hover{ transform:scale(1.04); background:rgba(255,255,255,0.42); }
+  #startGate.hide{ opacity:0; pointer-events:none; }
+
+  /* ---------- 앱 레이아웃 ---------- */
+  #app{ position:relative; z-index:5; height:100%; opacity:0; transition:opacity 1s ease; }
+  #app.show{ opacity:1; }
+
+  #topBar{
+    position:fixed; top:18px; left:18px; right:18px; z-index:20;
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    transition: opacity .6s ease, transform .6s ease;
+  }
+  .seasonGroup{ display:flex; gap:4px; background:var(--panel); border:1px solid var(--line); border-radius:999px; padding:5px; backdrop-filter: blur(10px); }
+  .seasonBtn{
+    height:34px; border-radius:999px; border:none; background:transparent;
+    color:var(--ink-dim); display:flex; align-items:center; justify-content:center;
+    padding:0 14px;
+    transition: background .3s ease, color .3s ease;
+  }
+  .seasonBtn span{ font-size:12.5px; letter-spacing:.02em; white-space:nowrap; }
+  .seasonBtn.active{ background:var(--accent); color:#161a12; }
+  .seasonBtn.allBtn{ font-weight:700; }
+
+  .topRight{ display:flex; gap:8px; }
+  .iconBtn{
+    width:40px; height:40px; border-radius:50%; border:1px solid var(--line);
+    background:var(--panel); color:var(--ink); display:flex; align-items:center; justify-content:center;
+    backdrop-filter: blur(10px); position:relative;
+  }
+  .iconBtn svg{ width:18px; height:18px; }
+  .iconBtn.active{ background:var(--accent); color:#161a12; border-color:transparent; }
+
+  #bgPanel{
+    position:absolute; top:48px; right:0; width:240px;
+    background:var(--panel-strong); border:1px solid var(--line); border-radius:14px;
+    padding:14px; backdrop-filter: blur(14px);
+    display:none; flex-direction:column; gap:10px;
+  }
+  #bgPanel.open{ display:flex; }
+  #bgPanel label{ font-size:12px; color:var(--ink-dim); display:flex; justify-content:space-between; }
+  #bgPanel .fileBtn{
+    background:transparent; border:1px dashed var(--line); color:var(--ink);
+    border-radius:10px; padding:9px; font-size:13px; text-align:center;
+  }
+  input[type="range"]{
+    -webkit-appearance:none; appearance:none; width:100%; height:3px; border-radius:3px;
+    background:rgba(247,245,238,0.25); outline:none;
+  }
+  input[type="range"]::-webkit-slider-thumb{
+    -webkit-appearance:none; width:13px; height:13px; border-radius:50%;
+    background:var(--accent); cursor:pointer; border:2px solid #12140f;
+  }
+  input[type="range"]::-moz-range-thumb{
+    width:13px; height:13px; border-radius:50%; background:var(--accent); border:2px solid #12140f; cursor:pointer;
+  }
+
+  /* ---------- 중앙 무대 ---------- */
+  #stage{
+    position:fixed; inset:0; z-index:10;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    pointer-events:none;
+    padding-bottom: 12vh;
+  }
+  #orbWrap{ position:relative; width:220px; height:220px; display:flex; align-items:center; justify-content:center; }
+  #orb{
+    width:180px; height:180px; border-radius:50%;
+    background: radial-gradient(circle at 35% 30%, rgba(255,255,255,0.55), var(--accent) 70%);
+    box-shadow: 0 0 60px 10px var(--accent-soft);
+    animation: breathe 9s ease-in-out infinite;
+  }
+  @keyframes breathe{
+    0%,100%{ transform:scale(0.92); opacity:.85; }
+    50%{ transform:scale(1.05); opacity:1; }
+  }
+  #breathLabel{
+    margin-top:22px; font-family:'Noto Serif KR', serif; font-weight:300;
+    font-size:15px; letter-spacing:.14em; color:var(--ink);
+    opacity:.9;
+  }
+  #stageTitle{
+    font-family:'Noto Serif KR', serif; font-weight:300;
+    font-size:clamp(22px,4vw,30px); letter-spacing:.04em; margin-top:26px; color:var(--ink);
+  }
+
+  /* ---------- 믹싱 데스크 ---------- */
+  #deck{
+    position:fixed; left:0; right:0; bottom:0; z-index:20;
+    max-height:46vh; overflow-y:auto;
+    background:var(--panel-strong); border-top:1px solid var(--line);
+    backdrop-filter: blur(16px);
+    padding:16px 18px 22px;
+    transition: opacity .6s ease, transform .6s ease;
+  }
+  #deck::-webkit-scrollbar{ width:5px; }
+  #deck::-webkit-scrollbar-thumb{ background:rgba(247,245,238,0.25); border-radius:4px; }
+  #deckHead{ font-size:12px; letter-spacing:.12em; color:var(--ink-dim); margin-bottom:12px; }
+
+  .track{ display:flex; align-items:center; gap:12px; padding:9px 0; border-bottom:1px solid var(--line); }
+  .track:last-of-type{ border-bottom:none; }
+  .muteBtn{
+    width:34px; height:34px; min-width:34px; border-radius:50%; border:1px solid var(--line);
+    background:transparent; color:var(--ink-dim); display:flex; align-items:center; justify-content:center;
+    transition: background .25s ease, color .25s ease, border-color .25s ease;
+  }
+  .muteBtn svg{ width:16px; height:16px; }
+  .muteBtn.on{ background:var(--accent); color:#161a12; border-color:transparent; }
+  .trackBody{ flex:1; min-width:0; }
+  .trackName{ font-size:13px; margin-bottom:5px; color:var(--ink); }
+  .urlToggle{
+    width:30px; height:30px; border-radius:8px; border:1px solid var(--line);
+    background:transparent; color:var(--ink-dim); font-size:10px; letter-spacing:.05em;
+  }
+  .urlPanel{ display:none; gap:6px; padding:8px 0 2px 46px; }
+  .urlPanel.open{ display:flex; flex-wrap:wrap; }
+  .urlPanel input[type="text"]{
+    flex:1; min-width:160px; background:rgba(0,0,0,0.25); border:1px solid var(--line);
+    border-radius:8px; color:var(--ink); padding:7px 10px; font-size:12px;
+  }
+  .urlPanel button{
+    background:rgba(255,255,255,0.1); border:1px solid var(--line); color:var(--ink);
+    border-radius:8px; padding:6px 10px; font-size:12px;
+  }
+  .urlHint{ width:100%; font-size:11px; color:var(--ink-dim); margin-top:2px; }
+
+  #ytBlock{ margin-top:14px; padding-top:14px; border-top:1px solid var(--line); }
+  #ytLabel{ font-size:12px; letter-spacing:.1em; color:var(--ink-dim); margin-bottom:8px; }
+  .ytRow{ display:flex; gap:8px; }
+  .ytRow input[type="text"]{
+    flex:1; background:rgba(0,0,0,0.25); border:1px solid var(--line); border-radius:10px;
+    color:var(--ink); padding:9px 12px; font-size:13px;
+  }
+  .ytRow button{
+    background:var(--accent); border:none; color:#161a12; border-radius:10px; padding:0 16px; font-size:13px;
+  }
+  #ytControls{ display:none; align-items:center; gap:12px; margin-top:10px; }
+  #ytControls.open{ display:flex; }
+  #ytPlayPause{
+    width:34px; height:34px; border-radius:50%; border:1px solid var(--line); background:transparent;
+    color:var(--ink); display:flex; align-items:center; justify-content:center;
+  }
+  #ytPlayPause svg{ width:14px; height:14px; }
+  #ytTitle{ font-size:12px; color:var(--ink-dim); flex-shrink:0; max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  /* ---------- 수면 모드 ---------- */
+  body.sleep #topBar, body.sleep #deck{ opacity:0; pointer-events:none; transform:translateY(8px); }
+  body.sleep.reveal #topBar, body.sleep.reveal #deck{ opacity:1; pointer-events:auto; transform:none; }
+  body.sleep #stage{ transition: opacity 1s ease; }
+  body.sleep #breathLabel, body.sleep #stageTitle{ opacity:.55; }
+
+  @media (max-width:560px){
+    #deck{ max-height:52vh; }
+    #bgPanel{ width:210px; }
+    #stage{ padding-bottom: 30vh; }
+    .seasonGroup{ max-width:60vw; overflow-x:auto; }
+    .seasonBtn{ padding:0 9px 0 8px; }
+    .seasonBtn span{ font-size:11.5px; }
+  }
+</style>
+</head>
+<body>
+
+  <div id="bgLayer"></div>
+  <div id="dimOverlay"></div>
+  <div id="sleepOverlay"></div>
+
+  <div id="startGate">
+    <h1>고요</h1>
+    <p>나만의 자연 힐링 사운드를 시작합니다 · 탭하여 오디오를 활성화하세요</p>
+    <button id="startBtn">시작하기</button>
+  </div>
+
+  <div id="app">
+    <div id="topBar">
+      <div class="seasonGroup" id="seasonGroup"></div>
+      <div class="topRight">
+        <div style="position:relative;">
+          <button class="iconBtn" id="bgToggle" title="배경 설정">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="M21 15l-5-5-8 8"/></svg>
+          </button>
+          <div id="bgPanel">
+            <button class="fileBtn" id="fileBtnLabel">이미지 업로드</button>
+            <input type="file" id="bgFile" accept="image/*" hidden>
+            <label>어둡기 <span id="dimVal">32%</span></label>
+            <input type="range" id="dimSlider" min="0" max="80" value="32">
+            <label>블러 <span id="blurVal">0px</span></label>
+            <input type="range" id="blurSlider" min="0" max="20" value="0">
+            <button class="fileBtn" id="bgReset" style="border-style:solid;">기본 배경으로</button>
+          </div>
+        </div>
+        <button class="iconBtn" id="sleepToggle" title="고요 모드">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div id="stage">
+      <div id="orbWrap"><div id="orb"></div></div>
+      <div id="breathLabel">들이쉬고</div>
+      <div id="stageTitle">나만의 자연 속에서</div>
+    </div>
+
+    <div id="deck">
+      <div id="deckHead">믹싱 데스크</div>
+      <div id="trackList"></div>
+      <div id="ytBlock">
+        <div id="ytLabel">배경 음악 (YouTube 링크)</div>
+        <div class="ytRow">
+          <input type="text" id="ytUrl" placeholder="https://www.youtube.com/watch?v=...">
+          <button id="ytApply">적용</button>
+        </div>
+        <div id="ytControls">
+          <button id="ytPlayPause">
+            <svg id="ytPlayIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+          </button>
+          <input type="range" id="ytVolume" min="0" max="100" value="50">
+          <span id="ytTitle">BGM 재생 중</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="yt-player" style="position:fixed; width:1px; height:1px; opacity:0; pointer-events:none; bottom:0; left:0;"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ================= 계절 테마 ================= */
+  const SEASONS = {
+    spring:{ label:"봄", a:"#EFEAD6", b:"#CFE0BE", c:"#9CC69A", accent:"#8FAE7A", soft:"#DCE8CE",
+      icon:'<path d="M12 21c0-6 4-9 4-14a4 4 0 0 0-8 0c0 5 4 8 4 14z"/><path d="M12 12c-3-1-5-3-5-6"/>' },
+    summer:{ label:"여름", a:"#E7F3EF", b:"#A9D6CF", c:"#3E8E8A", accent:"#2F8F8A", soft:"#CFE9E4",
+      icon:'<circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/>' },
+    autumn:{ label:"가을", a:"#F3E7D0", b:"#E0B27C", c:"#B5652E", accent:"#B5652E", soft:"#EFD9B8",
+      icon:'<path d="M12 2c3 3 3 6 1 8 3-1 5 1 5 4-3-1-5 0-6 3-1-3-3-4-6-3 0-3 2-5 5-4-2-2-2-5 1-8z"/>' },
+    winter:{ label:"겨울", a:"#EEF2F6", b:"#C3D2E0", c:"#5F7A93", accent:"#5F7A93", soft:"#DCE4EC",
+      icon:'<path d="M12 2v20M4.5 6.5l15 11M19.5 6.5l-15 11"/>' },
+    all:{ label:"ALL", a:"#EDEAE1", b:"#C7CBB6", c:"#8B8F72", accent:"#77805F", soft:"#DEE1CC" }
+  };
+  const root = document.documentElement;
+  function applySeason(key){
+    const s = SEASONS[key];
+    root.style.setProperty('--bg-a', s.a);
+    root.style.setProperty('--bg-b', s.b);
+    root.style.setProperty('--bg-c', s.c);
+    root.style.setProperty('--accent', s.accent);
+    root.style.setProperty('--accent-soft', s.soft);
+    if(!customBgActive){
+      document.getElementById('bgLayer').style.backgroundImage =
+        `linear-gradient(155deg, ${s.a} 0%, ${s.b} 48%, ${s.c} 100%)`;
+    }
+    document.getElementById('startGate').style.background =
+      `linear-gradient(155deg, ${s.a} 0%, ${s.b} 48%, ${s.c} 100%)`;
+    document.querySelectorAll('.seasonBtn').forEach(b=>b.classList.toggle('active', b.dataset.season===key));
+    if(key !== currentSeason) rebuildDeck(key);
+  }
+  const seasonGroup = document.getElementById('seasonGroup');
+  Object.keys(SEASONS).forEach(key=>{
+    const btn = document.createElement('button');
+    btn.className = 'seasonBtn' + (key==='all' ? ' allBtn' : '');
+    btn.dataset.season = key;
+    btn.title = SEASONS[key].label;
+    btn.innerHTML = `<span>${SEASONS[key].label}</span>`;
+    btn.onclick = ()=>applySeason(key);
+    seasonGroup.appendChild(btn);
+  });
+
+  /* ================= 배경 커스텀 ================= */
+  let customBgActive = false;
+  const bgLayer = document.getElementById('bgLayer');
+  const bgToggle = document.getElementById('bgToggle');
+  const bgPanel = document.getElementById('bgPanel');
+  bgToggle.onclick = (e)=>{ e.stopPropagation(); bgPanel.classList.toggle('open'); };
+  document.addEventListener('click', (e)=>{
+    if(!bgPanel.contains(e.target) && e.target!==bgToggle) bgPanel.classList.remove('open');
+  });
+  document.getElementById('fileBtnLabel').onclick = ()=>document.getElementById('bgFile').click();
+  document.getElementById('bgFile').addEventListener('change', function(e){
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = function(ev){
+      bgLayer.style.backgroundImage = `url(${ev.target.result})`;
+      customBgActive = true;
+    };
+    reader.readAsDataURL(file);
+  });
+  document.getElementById('bgReset').onclick = ()=>{
+    customBgActive = false;
+    const active = document.querySelector('.seasonBtn.active');
+    applySeason(active ? active.dataset.season : 'spring');
+  };
+  const dimOverlay = document.getElementById('dimOverlay');
+  const dimSlider = document.getElementById('dimSlider');
+  dimSlider.oninput = ()=>{
+    dimOverlay.style.opacity = dimSlider.value/100;
+    document.getElementById('dimVal').textContent = dimSlider.value+'%';
+  };
+  const blurSlider = document.getElementById('blurSlider');
+  blurSlider.oninput = ()=>{
+    bgLayer.style.filter = `blur(${blurSlider.value}px)`;
+    document.getElementById('blurVal').textContent = blurSlider.value+'px';
+  };
+
+  /* ================= 오디오 엔진 ================= */
+  let ctx = null;
+  function noiseBuffer(seconds){
+    const size = Math.floor(ctx.sampleRate*seconds);
+    const buf = ctx.createBuffer(1, size, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for(let i=0;i<size;i++) d[i] = Math.random()*2-1;
+    return buf;
+  }
+  function lfo(param, rate, depth, base, state){
+    const osc = ctx.createOscillator();
+    osc.frequency.value = rate;
+    const g = ctx.createGain();
+    g.gain.value = depth;
+    osc.connect(g);
+    g.connect(param);
+    param.setValueAtTime(base, ctx.currentTime);
+    osc.start();
+    if(state) state.nodes.push(osc);
+    return osc;
+  }
+  // 걷는 리듬으로 스케줄되는 바스락/뽀득 소리 계열(낙엽·눈)에 쓰는 공용 헬퍼
+  function scheduleWalking(out, state, opts){
+    (function step(){
+      if(state.stopped) return;
+      const now = ctx.currentTime;
+      const dur = opts.dur();
+      const src = ctx.createBufferSource(); src.buffer = noiseBuffer(dur);
+      const filt = ctx.createBiquadFilter(); filt.type='bandpass';
+      filt.frequency.value = opts.freq(); filt.Q.value = opts.q;
+      const g = ctx.createGain(); g.gain.setValueAtTime(0, now);
+      g.gain.linearRampToValueAtTime(opts.peak(), now+0.015);
+      g.gain.exponentialRampToValueAtTime(0.0001, now+dur);
+      src.connect(filt); filt.connect(g); g.connect(out);
+      src.start(now); src.stop(now+dur+0.05);
+      if(opts.double && Math.random()<opts.double){
+        setTimeout(()=>{
+          if(state.stopped) return;
+          const now2 = ctx.currentTime;
+          const dur2 = dur*0.6;
+          const src2 = ctx.createBufferSource(); src2.buffer = noiseBuffer(dur2);
+          const f2 = ctx.createBiquadFilter(); f2.type='bandpass'; f2.frequency.value=opts.freq()*1.3; f2.Q.value=opts.q;
+          const g2 = ctx.createGain(); g2.gain.setValueAtTime(0, now2);
+          g2.gain.linearRampToValueAtTime(opts.peak()*0.6, now2+0.01);
+          g2.gain.exponentialRampToValueAtTime(0.0001, now2+dur2);
+          src2.connect(f2); f2.connect(g2); g2.connect(out);
+          src2.start(now2); src2.stop(now2+dur2+0.05);
+        }, 40+Math.random()*40);
+      }
+      const stillWalking = Math.random() < opts.continueChance;
+      setTimeout(step, stillWalking ? opts.stepGap() : opts.pauseGap());
+    })();
+  }
+
+  function synthRain(state){
+    const src = ctx.createBufferSource(); src.buffer = noiseBuffer(4); src.loop = true;
+    const bp = ctx.createBiquadFilter(); bp.type='bandpass'; bp.Q.value=0.6;
+    const hp = ctx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=1100;
+    src.connect(bp); bp.connect(hp);
+    lfo(bp.frequency, 0.07, 500, 3400, state);
+    src.start(); state.nodes.push(src);
+    return hp;
+  }
+  function synthWind(state){
+    const src = ctx.createBufferSource(); src.buffer = noiseBuffer(6); src.loop = true;
+    const lp = ctx.createBiquadFilter(); lp.type='lowpass'; lp.Q.value=0.7;
+    src.connect(lp);
+    lfo(lp.frequency, 0.06, 280, 480, state);
+    const gust = ctx.createGain();
+    lp.connect(gust);
+    lfo(gust.gain, 0.1, 0.3, 0.6, state);
+    src.start(); state.nodes.push(src);
+    return gust;
+  }
+  function synthTyphoon(state){
+    const out = ctx.createGain(); out.gain.value = 1;
+    const rainSrc = ctx.createBufferSource(); rainSrc.buffer = noiseBuffer(4); rainSrc.loop = true;
+    const rainHp = ctx.createBiquadFilter(); rainHp.type='highpass'; rainHp.frequency.value=900;
+    const rainGain = ctx.createGain(); rainGain.gain.value = 0.55;
+    rainSrc.connect(rainHp); rainHp.connect(rainGain); rainGain.connect(out);
+    rainSrc.start(); state.nodes.push(rainSrc);
+
+    const windSrc = ctx.createBufferSource(); windSrc.buffer = noiseBuffer(6); windSrc.loop = true;
+    const windLp = ctx.createBiquadFilter(); windLp.type='lowpass'; windLp.Q.value=0.8;
+    windSrc.connect(windLp);
+    lfo(windLp.frequency, 0.09, 350, 600, state);
+    const windGain = ctx.createGain(); windGain.gain.value = 0.6;
+    windLp.connect(windGain); windGain.connect(out);
+    lfo(windGain.gain, 0.14, 0.25, 0.55, state);
+    windSrc.start(); state.nodes.push(windSrc);
+
+    (function scheduleThunder(){
+      if(state.stopped) return;
+      const delay = 5000 + Math.random()*10000;
+      setTimeout(()=>{
+        if(state.stopped) return;
+        const now = ctx.currentTime;
+        const dur = 1.8+Math.random()*2;
+        const src = ctx.createBufferSource(); src.buffer = noiseBuffer(dur);
+        const f = ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.value=100+Math.random()*100;
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0, now);
+        g.gain.linearRampToValueAtTime(0.9, now+0.3+Math.random()*0.4);
+        g.gain.exponentialRampToValueAtTime(0.001, now+dur);
+        src.connect(f); f.connect(g); g.connect(out);
+        src.start(now); src.stop(now+dur+0.1);
+        scheduleThunder();
+      }, delay);
+    })();
+    return out;
+  }
+  function synthSummerRain(state){
+    // 여름 소나기: 봄비보다 굵고 강한 빗줄기, 간간이 거세지는 스콜
+    const src = ctx.createBufferSource(); src.buffer = noiseBuffer(4); src.loop = true;
+    const bp = ctx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=2600; bp.Q.value=0.5;
+    const hp = ctx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=700;
+    src.connect(bp); bp.connect(hp);
+    lfo(bp.frequency, 0.05, 700, 2600, state);
+    const intensity = ctx.createGain();
+    hp.connect(intensity);
+    lfo(intensity.gain, 0.08, 0.2, 0.85, state);
+    src.start(); state.nodes.push(src);
+    return intensity;
+  }
+  function synthThunderSolo(state){
+    // 독립된 천둥소리: 낮은 배경 울림 + 불규칙하게 터지는 굉음
+    const out = ctx.createGain(); out.gain.value = 1;
+    const base = ctx.createBufferSource(); base.buffer = noiseBuffer(6); base.loop = true;
+    const lp = ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=110;
+    const bg = ctx.createGain(); bg.gain.value=0.4;
+    base.connect(lp); lp.connect(bg); bg.connect(out);
+    base.start(); state.nodes.push(base);
+    (function scheduleRumble(){
+      if(state.stopped) return;
+      const delay = 6000 + Math.random()*14000;
+      setTimeout(()=>{
+        if(state.stopped) return;
+        const now = ctx.currentTime;
+        const dur = 2+Math.random()*2.4;
+        const src = ctx.createBufferSource(); src.buffer = noiseBuffer(dur);
+        const f = ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.value=90+Math.random()*100;
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0, now);
+        g.gain.linearRampToValueAtTime(0.9, now+0.3+Math.random()*0.5);
+        g.gain.exponentialRampToValueAtTime(0.001, now+dur);
+        src.connect(f); f.connect(g); g.connect(out);
+        src.start(now); src.stop(now+dur+0.1);
+        scheduleRumble();
+      }, delay);
+    })();
+    return out;
+  }
+  function synthWaves(state){
+    const src = ctx.createBufferSource(); src.buffer = noiseBuffer(6); src.loop = true;
+    const bp = ctx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=450; bp.Q.value=0.5;
+    src.connect(bp);
+    const swell = ctx.createGain();
+    bp.connect(swell);
+    lfo(swell.gain, 0.12, 0.42, 0.5, state);
+    src.start(); state.nodes.push(src);
+    return swell;
+  }
+  function synthCicadas(state){
+    const out = ctx.createGain(); out.gain.value = 0.5;
+    function voice(freq, rate, det){
+      const osc = ctx.createOscillator(); osc.type='sawtooth'; osc.frequency.value = freq+det;
+      const trem = ctx.createGain(); trem.gain.value = 0.4;
+      osc.connect(trem);
+      const l = ctx.createOscillator(); l.type='sine'; l.frequency.value = rate;
+      const lg = ctx.createGain(); lg.gain.value = 0.4;
+      l.connect(lg); lg.connect(trem.gain);
+      trem.connect(out);
+      osc.start(); l.start();
+      state.nodes.push(osc, l);
+    }
+    voice(3800, 42, 0);
+    voice(3950, 38, 6);
+    lfo(out.gain, 0.2, 0.15, 0.45, state);
+    return out;
+  }
+  function synthBirds(state){
+    const out = ctx.createGain(); out.gain.value = 1;
+    (function chirp(){
+      if(state.stopped) return;
+      const now = ctx.currentTime;
+      const f0 = 2200+Math.random()*1200;
+      const osc = ctx.createOscillator(); osc.type='sine';
+      const g = ctx.createGain(); g.gain.setValueAtTime(0, now);
+      osc.frequency.setValueAtTime(f0, now);
+      osc.frequency.exponentialRampToValueAtTime(f0*1.3, now+0.06);
+      osc.frequency.exponentialRampToValueAtTime(f0*0.85, now+0.18);
+      g.gain.linearRampToValueAtTime(0.28, now+0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, now+0.22);
+      osc.connect(g); g.connect(out);
+      osc.start(now); osc.stop(now+0.25);
+      if(Math.random()<0.5){
+        setTimeout(()=>{
+          if(state.stopped) return;
+          const now2 = ctx.currentTime;
+          const f2 = f0*1.1;
+          const o2 = ctx.createOscillator(); o2.type='sine';
+          const g2 = ctx.createGain(); g2.gain.setValueAtTime(0, now2);
+          o2.frequency.setValueAtTime(f2, now2);
+          o2.frequency.exponentialRampToValueAtTime(f2*0.8, now2+0.15);
+          g2.gain.linearRampToValueAtTime(0.22, now2+0.02);
+          g2.gain.exponentialRampToValueAtTime(0.0001, now2+0.18);
+          o2.connect(g2); g2.connect(out);
+          o2.start(now2); o2.stop(now2+0.2);
+        }, 170+Math.random()*90);
+      }
+      setTimeout(chirp, 900+Math.random()*3500);
+    })();
+    return out;
+  }
+  function synthLeafWalk(state){
+    const out = ctx.createGain(); out.gain.value = 1;
+    scheduleWalking(out, state, {
+      dur: ()=>0.22+Math.random()*0.16,
+      freq: ()=>1600+Math.random()*2000,
+      q: 0.9,
+      peak: ()=>0.55+Math.random()*0.25,
+      double: 0.5,
+      continueChance: 0.72,
+      stepGap: ()=>480+Math.random()*160,
+      pauseGap: ()=>2200+Math.random()*4200
+    });
+    return out;
+  }
+  function synthCrickets(state){
+    const out = ctx.createGain(); out.gain.value = 0.55;
+    function voice(freq, rate){
+      const osc = ctx.createOscillator(); osc.type='sine'; osc.frequency.value = freq;
+      const trem = ctx.createGain(); trem.gain.value = 0.5;
+      osc.connect(trem);
+      const l = ctx.createOscillator(); l.type='square'; l.frequency.value = rate;
+      const lg = ctx.createGain(); lg.gain.value = 0.5;
+      l.connect(lg); lg.connect(trem.gain);
+      trem.connect(out);
+      osc.start(); l.start();
+      state.nodes.push(osc, l);
+    }
+    voice(4600, 27);
+    voice(4150, 23);
+    lfo(out.gain, 0.55, 0.4, 0.55, state);
+    return out;
+  }
+  function synthSnowWalk(state){
+    const out = ctx.createGain(); out.gain.value = 1;
+    scheduleWalking(out, state, {
+      dur: ()=>0.14+Math.random()*0.1,
+      freq: ()=>2600+Math.random()*2600,
+      q: 1.4,
+      peak: ()=>0.5+Math.random()*0.2,
+      double: 0.75,
+      continueChance: 0.7,
+      stepGap: ()=>560+Math.random()*180,
+      pauseGap: ()=>2600+Math.random()*4600
+    });
+    return out;
+  }
+  function synthFireplace(state){
+    const out = ctx.createGain(); out.gain.value = 1;
+    const bed = ctx.createBufferSource(); bed.buffer = noiseBuffer(5); bed.loop = true;
+    const lp = ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=500;
+    const bedGain = ctx.createGain(); bedGain.gain.value = 0.22;
+    bed.connect(lp); lp.connect(bedGain); bedGain.connect(out);
+    bed.start(); state.nodes.push(bed);
+    (function pop(){
+      if(state.stopped) return;
+      const now = ctx.currentTime;
+      const dur = 0.03+Math.random()*0.05;
+      const src = ctx.createBufferSource(); src.buffer = noiseBuffer(dur);
+      const hp = ctx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=2200+Math.random()*2000;
+      const g = ctx.createGain(); g.gain.setValueAtTime(0, now);
+      g.gain.linearRampToValueAtTime(0.5+Math.random()*0.3, now+0.005);
+      g.gain.exponentialRampToValueAtTime(0.0001, now+dur);
+      src.connect(hp); hp.connect(g); g.connect(out);
+      src.start(now); src.stop(now+dur+0.02);
+      setTimeout(pop, 250+Math.random()*1300);
+    })();
+    return out;
+  }
+
+  const SOUND_LIBRARY = {
+    rain:      { name:'봄비 소리',        max:0.55, vol:40, muted:false, synth:synthRain,
+      icon:'<path d="M8 13v4M12 15v4M16 13v4"/><path d="M7 10a4 4 0 0 1 1-7.9A5 5 0 0 1 18 3a3.5 3.5 0 0 1-1 6.9"/>' },
+    wind:      { name:'바람소리',         max:0.5,  vol:25, muted:false, synth:synthWind,
+      icon:'<path d="M3 8h11a2.5 2.5 0 1 0-2.2-3.7"/><path d="M3 12h15a2.5 2.5 0 1 1-2.2 3.7"/><path d="M3 16h9"/>' },
+    birds:     { name:'새소리',           max:0.45, vol:20, muted:false, synth:synthBirds,
+      icon:'<path d="M4 12c2-4 6-6 10-5-1-2 1-4 3-3-1 2 0 3 1 3-1 4-4 6-8 6-2 3-5 4-8 4 1-2 2-3 2-5z"/>' },
+    crickets:  { name:'풀벌레 소리',      max:0.35, vol:15, muted:false, synth:synthCrickets,
+      icon:'<circle cx="12" cy="13" r="4"/><path d="M9 9l-2-3M15 9l2-3M8 16l-3 2M16 16l3 2M12 9V6"/>' },
+    typhoon:   { name:'태풍/폭풍우 소리', max:0.85, vol:30, muted:false, synth:synthTyphoon,
+      icon:'<path d="M9 16h6l-2 6 6-9h-4l2-6-8 9z"/><path d="M7 15a4 4 0 0 1 1-7.9A5 5 0 0 1 18 8a3.5 3.5 0 0 1-1 6.9"/>' },
+    summerrain:{ name:'여름 소나기 소리', max:0.6, vol:35, muted:false, synth:synthSummerRain,
+      icon:'<path d="M8 13v4M12 15v4M16 13v4"/><path d="M7 10a4 4 0 0 1 1-7.9A5 5 0 0 1 18 3a3.5 3.5 0 0 1-1 6.9"/>' },
+    thunder:   { name:'천둥소리',          max:0.9,  vol:15, muted:true,  synth:synthThunderSolo,
+      icon:'<path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/>' },
+    waves:     { name:'파도소리',         max:0.5,  vol:28, muted:false, synth:synthWaves,
+      icon:'<path d="M2 15c2-2 4-2 6 0s4 2 6 0 4-2 6 0"/><path d="M2 19c2-2 4-2 6 0s4 2 6 0 4-2 6 0"/>' },
+    cicadas:   { name:'매미소리',         max:0.4,  vol:18, muted:false, synth:synthCicadas,
+      icon:'<ellipse cx="12" cy="13" rx="2.2" ry="4"/><path d="M10 10c-3-3-6-3-8-1M14 10c3-3 6-3 8-1M10 16c-3 3-6 3-8 1M14 16c3 3 6 3 8 1"/>' },
+    leafwalk:  { name:'낙엽 밟는 소리',   max:0.6,  vol:22, muted:false, synth:synthLeafWalk,
+      icon:'<path d="M12 3c5 1 8 5 6 11-4 2-9 0-10-5-1-3 1-5 4-6z"/><path d="M8 21c1-4 3-7 7-9"/>' },
+    snowwalk:  { name:'눈 밟는 소리',     max:0.6,  vol:22, muted:false, synth:synthSnowWalk,
+      icon:'<ellipse cx="12" cy="15" rx="3.6" ry="5.6"/><circle cx="9.3" cy="7" r="1.2"/><circle cx="11.6" cy="5.4" r="1.2"/><circle cx="14" cy="5.6" r="1.2"/><circle cx="16" cy="7.4" r="1.2"/>' },
+    fireplace: { name:'벽난로 타는 소리', max:0.5,  vol:18, muted:false, synth:synthFireplace,
+      icon:'<path d="M12 3c3 4 6 6 6 10a6 6 0 0 1-12 0c0-2 1-3 2-4-.5 2 .5 3 1.5 2.5C8 9 9 6 12 3z"/>' }
+  };
+
+  const SEASON_SOUNDS = {
+    spring: ['rain','birds','crickets','wind'],
+    summer: ['typhoon','summerrain','thunder','waves','cicadas','wind'],
+    autumn: ['leafwalk','wind','crickets','birds'],
+    winter: ['snowwalk','wind','fireplace'],
+    all: ['rain','wind','birds','crickets','typhoon','summerrain','thunder','waves','cicadas','leafwalk','snowwalk','fireplace']
+  };
+
+  const trackList = document.getElementById('trackList');
+  const deckHead = document.getElementById('deckHead');
+  const activeNodes = {};
+  let currentSeason = 'spring';
+
+  function disposeNode(id){
+    const a = activeNodes[id];
+    if(!a) return;
+    a.state.stopped = true;
+    a.state.nodes.forEach(n=>{ try{ n.stop(); }catch(e){} });
+    try{ a.gainNode.disconnect(); }catch(e){}
+    if(a.audioEl){
+      try{ a.audioEl.pause(); a.audioSourceNode.disconnect(); }catch(e){}
+    }
+    delete activeNodes[id];
+  }
+
+  function startNode(id){
+    if(!ctx || activeNodes[id]) return;
+    const def = SOUND_LIBRARY[id];
+    const gainNode = ctx.createGain();
+    gainNode.gain.value = def.muted ? 0 : (def.vol/100)*def.max;
+    gainNode.connect(ctx.destination);
+    const state = { stopped:false, nodes:[] };
+    const synthOut = def.synth(state);
+    synthOut.connect(gainNode);
+    activeNodes[id] = { gainNode, state, synthOut, audioEl:null, audioSourceNode:null };
+  }
+
+  function updateGain(id){
+    const def = SOUND_LIBRARY[id];
+    const a = activeNodes[id];
+    if(!a) return;
+    const target = def.muted ? 0 : (def.vol/100)*def.max;
+    a.gainNode.gain.setTargetAtTime(target, ctx.currentTime, 0.05);
+  }
+
+  function renderTrackRow(id){
+    const def = SOUND_LIBRARY[id];
+    const wrap = document.createElement('div');
+    wrap.innerHTML = `
+      <div class="track" data-id="${id}">
+        <button class="muteBtn ${def.muted?'':'on'}" title="켜기/끄기">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">${def.icon}</svg>
+        </button>
+        <div class="trackBody">
+          <div class="trackName">${def.name}</div>
+          <input type="range" min="0" max="100" value="${def.vol}" class="volSlider">
+        </div>
+        <button class="urlToggle">URL</button>
+      </div>
+      <div class="urlPanel">
+        <input type="text" placeholder="mp3 직링크를 붙여넣으세요">
+        <button class="urlApply">적용</button>
+        <button class="urlReset">기본음</button>
+        <div class="urlHint">Mixkit · Pixabay · Freesound 등 무료 CC 사운드의 직접 mp3 링크를 사용할 수 있어요. 비워두면 내장된 자연음이 재생됩니다.</div>
+      </div>
+    `;
+    trackList.appendChild(wrap);
+
+    const muteBtn = wrap.querySelector('.muteBtn');
+    const volSlider = wrap.querySelector('.volSlider');
+    const urlToggle = wrap.querySelector('.urlToggle');
+    const urlPanel = wrap.querySelector('.urlPanel');
+    const urlInput = wrap.querySelector('input[type="text"]');
+    const urlApply = wrap.querySelector('.urlApply');
+    const urlReset = wrap.querySelector('.urlReset');
+
+    muteBtn.onclick = ()=>{
+      def.muted = !def.muted;
+      muteBtn.classList.toggle('on', !def.muted);
+      updateGain(id);
+    };
+    volSlider.oninput = ()=>{ def.vol = +volSlider.value; updateGain(id); };
+    urlToggle.onclick = ()=>urlPanel.classList.toggle('open');
+    urlApply.onclick = ()=>{
+      const url = urlInput.value.trim();
+      const a = activeNodes[id];
+      if(!url || !ctx || !a) return;
+      if(a.audioSourceNode){ a.audioSourceNode.disconnect(); }
+      if(a.synthOut){ a.synthOut.disconnect(); }
+      const audio = new Audio();
+      audio.crossOrigin = 'anonymous';
+      audio.loop = true;
+      audio.src = url;
+      audio.addEventListener('canplay', ()=>{ audio.play().catch(()=>{}); });
+      audio.addEventListener('error', ()=>{
+        urlInput.placeholder = '재생할 수 없는 링크예요. 다른 mp3 직링크를 시도해주세요';
+        if(a.synthOut) a.synthOut.connect(a.gainNode);
+      });
+      try{
+        const node = ctx.createMediaElementSource(audio);
+        node.connect(a.gainNode);
+        a.audioEl = audio;
+        a.audioSourceNode = node;
+      }catch(e){ if(a.synthOut) a.synthOut.connect(a.gainNode); }
+    };
+    urlReset.onclick = ()=>{
+      urlInput.value = '';
+      const a = activeNodes[id];
+      if(!a) return;
+      if(a.audioEl){ a.audioEl.pause(); a.audioSourceNode.disconnect(); a.audioEl=null; a.audioSourceNode=null; }
+      if(a.synthOut){ a.synthOut.connect(a.gainNode); }
+    };
+  }
+
+  function rebuildDeck(seasonKey){
+    currentSeason = seasonKey;
+    Object.keys(activeNodes).forEach(disposeNode);
+    trackList.innerHTML = '';
+    const ids = SEASON_SOUNDS[seasonKey];
+    ids.forEach(id=>{
+      renderTrackRow(id);
+      if(ctx) startNode(id);
+    });
+    deckHead.textContent = `믹싱 데스크 · ${SEASONS[seasonKey].label}`;
+  }
+  rebuildDeck('spring');
+
+  /* ================= 시작 게이트 & 초기화 ================= */
+  document.getElementById('startBtn').addEventListener('click', function initAudio(){
+    if(ctx) return;
+    ctx = new (window.AudioContext||window.webkitAudioContext)();
+    ctx.resume();
+    SEASON_SOUNDS[currentSeason].forEach(id=>startNode(id));
+    document.getElementById('startGate').classList.add('hide');
+    document.getElementById('app').classList.add('show');
+    applySeason('spring');
+  });
+
+  /* 호흡 라벨 애니메이션 (약 9초 주기: 들이쉬고 4.5s / 내쉬고 4.5s) */
+  const breathLabel = document.getElementById('breathLabel');
+  let breathIn = true;
+  setInterval(()=>{
+    breathIn = !breathIn;
+    breathLabel.textContent = breathIn ? '들이쉬고' : '내쉬고';
+  }, 4500);
+
+  /* ================= 유튜브 IFrame API ================= */
+  let ytPlayer = null, ytReady = false, pendingVideoId = null, ytPlaying = false;
+  window.onYouTubeIframeAPIReady = function(){ ytReady = true; if(pendingVideoId) createYtPlayer(pendingVideoId); };
+  const ytScript = document.createElement('script');
+  ytScript.src = 'https://www.youtube.com/iframe_api';
+  document.head.appendChild(ytScript);
+
+  function extractYoutubeId(url){
+    const m = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([a-zA-Z0-9_-]{11})/);
+    return m ? m[1] : null;
+  }
+  function createYtPlayer(id){
+    ytPlayer = new YT.Player('yt-player', {
+      height:'1', width:'1', videoId:id,
+      playerVars:{ autoplay:1, controls:0, loop:1, playlist:id },
+      events:{
+        onReady:(e)=>{ e.target.setVolume(+document.getElementById('ytVolume').value); e.target.playVideo(); ytPlaying=true; updateYtIcon(); }
+      }
+    });
+  }
+  document.getElementById('ytApply').onclick = ()=>{
+    const url = document.getElementById('ytUrl').value.trim();
+    const id = extractYoutubeId(url);
+    if(!id){ document.getElementById('ytUrl').placeholder = '올바른 유튜브 링크가 아니에요'; return; }
+    document.getElementById('ytControls').classList.add('open');
+    if(ytPlayer && ytPlayer.loadVideoById){
+      ytPlayer.loadVideoById(id);
+      ytPlaying = true; updateYtIcon();
+    } else if(ytReady){
+      createYtPlayer(id);
+    } else {
+      pendingVideoId = id;
+    }
+  };
+  document.getElementById('ytVolume').oninput = function(){
+    if(ytPlayer && ytPlayer.setVolume) ytPlayer.setVolume(+this.value);
+  };
+  function updateYtIcon(){
+    document.getElementById('ytPlayIcon').outerHTML = ytPlaying
+      ? '<svg id="ytPlayIcon" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg>'
+      : '<svg id="ytPlayIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+  }
+  document.getElementById('ytPlayPause').onclick = ()=>{
+    if(!ytPlayer) return;
+    if(ytPlaying){ ytPlayer.pauseVideo(); ytPlaying=false; } else { ytPlayer.playVideo(); ytPlaying=true; }
+    updateYtIcon();
+  };
+
+  /* ================= 수면 모드 ================= */
+  const body = document.body;
+  let idleTimer = null;
+  function revealTemporarily(){
+    if(!body.classList.contains('sleep')) return;
+    body.classList.add('reveal');
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(()=>body.classList.remove('reveal'), 3200);
+  }
+  ['mousemove','click','touchstart','keydown'].forEach(ev=>{
+    window.addEventListener(ev, revealTemporarily);
+  });
+  document.getElementById('sleepToggle').onclick = (e)=>{
+    e.stopPropagation();
+    const on = body.classList.toggle('sleep');
+    document.getElementById('sleepToggle').classList.toggle('active', on);
+    if(on){ revealTemporarily(); } else { body.classList.remove('reveal'); }
+  };
+
+})();
+</script>
+</body>
+</html>
