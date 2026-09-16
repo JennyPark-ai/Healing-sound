@@ -212,15 +212,13 @@
   }
   .ytRow button{
     background:var(--accent); border:none; color:#161a12; border-radius:10px; padding:0 16px; font-size:13px;
+    white-space:nowrap;
   }
-  #ytControls{ display:none; align-items:center; gap:12px; margin-top:10px; }
-  #ytControls.open{ display:flex; }
-  #ytPlayPause{
-    width:34px; height:34px; border-radius:50%; border:1px solid var(--line); background:transparent;
-    color:var(--ink); display:flex; align-items:center; justify-content:center;
+  #ytTrackList{ margin-top:4px; }
+  .ytRemove{
+    width:30px; height:30px; border-radius:8px; border:1px solid var(--line);
+    background:transparent; color:var(--ink-dim); font-size:14px; line-height:1;
   }
-  #ytPlayPause svg{ width:14px; height:14px; }
-  #ytTitle{ font-size:12px; color:var(--ink-dim); flex-shrink:0; max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
   /* ---------- 수면 모드 ---------- */
   body.sleep #topBar, body.sleep #deck{ opacity:0; pointer-events:none; transform:translateY(8px); }
@@ -284,23 +282,15 @@
       <div id="deckHead">믹싱 데스크</div>
       <div id="trackList"></div>
       <div id="ytBlock">
-        <div id="ytLabel">배경 음악 (YouTube 링크)</div>
+        <div id="ytLabel">YouTube 사운드 트랙 추가</div>
         <div class="ytRow">
           <input type="text" id="ytUrl" placeholder="https://www.youtube.com/watch?v=...">
-          <button id="ytApply">적용</button>
+          <button id="ytApply">트랙 추가</button>
         </div>
-        <div id="ytControls">
-          <button id="ytPlayPause">
-            <svg id="ytPlayIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-          </button>
-          <input type="range" id="ytVolume" min="0" max="100" value="50">
-          <span id="ytTitle">BGM 재생 중</span>
-        </div>
+        <div id="ytTrackList"></div>
       </div>
     </div>
   </div>
-
-  <div id="yt-player" style="position:fixed; width:1px; height:1px; opacity:0; pointer-events:none; bottom:0; left:0;"></div>
 
 <script>
 (function(){
@@ -385,11 +375,32 @@
 
   /* ================= 오디오 엔진 ================= */
   let ctx = null;
+  let masterBus = null;
   function noiseBuffer(seconds){
     const size = Math.floor(ctx.sampleRate*seconds);
     const buf = ctx.createBuffer(1, size, ctx.sampleRate);
     const d = buf.getChannelData(0);
     for(let i=0;i<size;i++) d[i] = Math.random()*2-1;
+    return buf;
+  }
+  // 지속되는 배경음(비/바람/파도)에는 화이트노이즈보다 부드러운 핑크노이즈가 훨씬 자연스럽다
+  function pinkNoiseBuffer(seconds){
+    const size = Math.floor(ctx.sampleRate*seconds);
+    const buf = ctx.createBuffer(1, size, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    let b0=0,b1=0,b2=0,b3=0,b4=0,b5=0,b6=0;
+    for(let i=0;i<size;i++){
+      const white = Math.random()*2-1;
+      b0 = 0.99886*b0 + white*0.0555179;
+      b1 = 0.99332*b1 + white*0.0750759;
+      b2 = 0.96900*b2 + white*0.1538520;
+      b3 = 0.86650*b3 + white*0.3104856;
+      b4 = 0.55000*b4 + white*0.5329522;
+      b5 = -0.7616*b5 - white*0.0168980;
+      const pink = b0+b1+b2+b3+b4+b5+b6+white*0.5362;
+      b6 = white*0.115926;
+      d[i] = pink*0.12;
+    }
     return buf;
   }
   function lfo(param, rate, depth, base, state){
@@ -438,40 +449,40 @@
   }
 
   function synthRain(state){
-    const src = ctx.createBufferSource(); src.buffer = noiseBuffer(4); src.loop = true;
-    const bp = ctx.createBiquadFilter(); bp.type='bandpass'; bp.Q.value=0.6;
-    const hp = ctx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=1100;
+    const src = ctx.createBufferSource(); src.buffer = pinkNoiseBuffer(4); src.loop = true;
+    const bp = ctx.createBiquadFilter(); bp.type='bandpass'; bp.Q.value=0.4;
+    const hp = ctx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=900;
     src.connect(bp); bp.connect(hp);
-    lfo(bp.frequency, 0.07, 500, 3400, state);
+    lfo(bp.frequency, 0.07, 400, 3000, state);
     src.start(); state.nodes.push(src);
     return hp;
   }
   function synthWind(state){
-    const src = ctx.createBufferSource(); src.buffer = noiseBuffer(6); src.loop = true;
-    const lp = ctx.createBiquadFilter(); lp.type='lowpass'; lp.Q.value=0.7;
+    const src = ctx.createBufferSource(); src.buffer = pinkNoiseBuffer(6); src.loop = true;
+    const lp = ctx.createBiquadFilter(); lp.type='lowpass'; lp.Q.value=0.5;
     src.connect(lp);
-    lfo(lp.frequency, 0.06, 280, 480, state);
+    lfo(lp.frequency, 0.06, 240, 420, state);
     const gust = ctx.createGain();
     lp.connect(gust);
-    lfo(gust.gain, 0.1, 0.3, 0.6, state);
+    lfo(gust.gain, 0.1, 0.28, 0.6, state);
     src.start(); state.nodes.push(src);
     return gust;
   }
   function synthTyphoon(state){
     const out = ctx.createGain(); out.gain.value = 1;
-    const rainSrc = ctx.createBufferSource(); rainSrc.buffer = noiseBuffer(4); rainSrc.loop = true;
-    const rainHp = ctx.createBiquadFilter(); rainHp.type='highpass'; rainHp.frequency.value=900;
-    const rainGain = ctx.createGain(); rainGain.gain.value = 0.55;
+    const rainSrc = ctx.createBufferSource(); rainSrc.buffer = pinkNoiseBuffer(4); rainSrc.loop = true;
+    const rainHp = ctx.createBiquadFilter(); rainHp.type='highpass'; rainHp.frequency.value=700;
+    const rainGain = ctx.createGain(); rainGain.gain.value = 0.6;
     rainSrc.connect(rainHp); rainHp.connect(rainGain); rainGain.connect(out);
     rainSrc.start(); state.nodes.push(rainSrc);
 
-    const windSrc = ctx.createBufferSource(); windSrc.buffer = noiseBuffer(6); windSrc.loop = true;
-    const windLp = ctx.createBiquadFilter(); windLp.type='lowpass'; windLp.Q.value=0.8;
+    const windSrc = ctx.createBufferSource(); windSrc.buffer = pinkNoiseBuffer(6); windSrc.loop = true;
+    const windLp = ctx.createBiquadFilter(); windLp.type='lowpass'; windLp.Q.value=0.6;
     windSrc.connect(windLp);
-    lfo(windLp.frequency, 0.09, 350, 600, state);
+    lfo(windLp.frequency, 0.09, 300, 550, state);
     const windGain = ctx.createGain(); windGain.gain.value = 0.6;
     windLp.connect(windGain); windGain.connect(out);
-    lfo(windGain.gain, 0.14, 0.25, 0.55, state);
+    lfo(windGain.gain, 0.14, 0.22, 0.55, state);
     windSrc.start(); state.nodes.push(windSrc);
 
     (function scheduleThunder(){
@@ -481,11 +492,11 @@
         if(state.stopped) return;
         const now = ctx.currentTime;
         const dur = 1.8+Math.random()*2;
-        const src = ctx.createBufferSource(); src.buffer = noiseBuffer(dur);
-        const f = ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.value=100+Math.random()*100;
+        const src = ctx.createBufferSource(); src.buffer = pinkNoiseBuffer(dur);
+        const f = ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.value=95+Math.random()*90;
         const g = ctx.createGain();
         g.gain.setValueAtTime(0, now);
-        g.gain.linearRampToValueAtTime(0.9, now+0.3+Math.random()*0.4);
+        g.gain.linearRampToValueAtTime(0.8, now+0.3+Math.random()*0.4);
         g.gain.exponentialRampToValueAtTime(0.001, now+dur);
         src.connect(f); f.connect(g); g.connect(out);
         src.start(now); src.stop(now+dur+0.1);
@@ -496,23 +507,23 @@
   }
   function synthSummerRain(state){
     // 여름 소나기: 봄비보다 굵고 강한 빗줄기, 간간이 거세지는 스콜
-    const src = ctx.createBufferSource(); src.buffer = noiseBuffer(4); src.loop = true;
-    const bp = ctx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=2600; bp.Q.value=0.5;
-    const hp = ctx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=700;
+    const src = ctx.createBufferSource(); src.buffer = pinkNoiseBuffer(4); src.loop = true;
+    const bp = ctx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=2200; bp.Q.value=0.4;
+    const hp = ctx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=550;
     src.connect(bp); bp.connect(hp);
-    lfo(bp.frequency, 0.05, 700, 2600, state);
+    lfo(bp.frequency, 0.05, 550, 2200, state);
     const intensity = ctx.createGain();
     hp.connect(intensity);
-    lfo(intensity.gain, 0.08, 0.2, 0.85, state);
+    lfo(intensity.gain, 0.08, 0.18, 0.82, state);
     src.start(); state.nodes.push(src);
     return intensity;
   }
   function synthThunderSolo(state){
     // 독립된 천둥소리: 낮은 배경 울림 + 불규칙하게 터지는 굉음
     const out = ctx.createGain(); out.gain.value = 1;
-    const base = ctx.createBufferSource(); base.buffer = noiseBuffer(6); base.loop = true;
+    const base = ctx.createBufferSource(); base.buffer = pinkNoiseBuffer(6); base.loop = true;
     const lp = ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=110;
-    const bg = ctx.createGain(); bg.gain.value=0.4;
+    const bg = ctx.createGain(); bg.gain.value=0.45;
     base.connect(lp); lp.connect(bg); bg.connect(out);
     base.start(); state.nodes.push(base);
     (function scheduleRumble(){
@@ -522,11 +533,11 @@
         if(state.stopped) return;
         const now = ctx.currentTime;
         const dur = 2+Math.random()*2.4;
-        const src = ctx.createBufferSource(); src.buffer = noiseBuffer(dur);
-        const f = ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.value=90+Math.random()*100;
+        const src = ctx.createBufferSource(); src.buffer = pinkNoiseBuffer(dur);
+        const f = ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.value=85+Math.random()*90;
         const g = ctx.createGain();
         g.gain.setValueAtTime(0, now);
-        g.gain.linearRampToValueAtTime(0.9, now+0.3+Math.random()*0.5);
+        g.gain.linearRampToValueAtTime(0.8, now+0.3+Math.random()*0.5);
         g.gain.exponentialRampToValueAtTime(0.001, now+dur);
         src.connect(f); f.connect(g); g.connect(out);
         src.start(now); src.stop(now+dur+0.1);
@@ -536,12 +547,12 @@
     return out;
   }
   function synthWaves(state){
-    const src = ctx.createBufferSource(); src.buffer = noiseBuffer(6); src.loop = true;
-    const bp = ctx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=450; bp.Q.value=0.5;
+    const src = ctx.createBufferSource(); src.buffer = pinkNoiseBuffer(6); src.loop = true;
+    const bp = ctx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=380; bp.Q.value=0.4;
     src.connect(bp);
     const swell = ctx.createGain();
     bp.connect(swell);
-    lfo(swell.gain, 0.12, 0.42, 0.5, state);
+    lfo(swell.gain, 0.12, 0.4, 0.5, state);
     src.start(); state.nodes.push(src);
     return swell;
   }
@@ -549,10 +560,11 @@
     const out = ctx.createGain(); out.gain.value = 0.5;
     function voice(freq, rate, det){
       const osc = ctx.createOscillator(); osc.type='sawtooth'; osc.frequency.value = freq+det;
-      const trem = ctx.createGain(); trem.gain.value = 0.4;
-      osc.connect(trem);
+      const warm = ctx.createBiquadFilter(); warm.type='lowpass'; warm.frequency.value=5200; warm.Q.value=0.3;
+      const trem = ctx.createGain(); trem.gain.value = 0.35;
+      osc.connect(warm); warm.connect(trem);
       const l = ctx.createOscillator(); l.type='sine'; l.frequency.value = rate;
-      const lg = ctx.createGain(); lg.gain.value = 0.4;
+      const lg = ctx.createGain(); lg.gain.value = 0.35;
       l.connect(lg); lg.connect(trem.gain);
       trem.connect(out);
       osc.start(); l.start();
@@ -560,7 +572,7 @@
     }
     voice(3800, 42, 0);
     voice(3950, 38, 6);
-    lfo(out.gain, 0.2, 0.15, 0.45, state);
+    lfo(out.gain, 0.2, 0.15, 0.4, state);
     return out;
   }
   function synthBirds(state){
@@ -601,9 +613,9 @@
     const out = ctx.createGain(); out.gain.value = 1;
     scheduleWalking(out, state, {
       dur: ()=>0.22+Math.random()*0.16,
-      freq: ()=>1600+Math.random()*2000,
-      q: 0.9,
-      peak: ()=>0.55+Math.random()*0.25,
+      freq: ()=>1500+Math.random()*1800,
+      q: 0.6,
+      peak: ()=>0.5+Math.random()*0.22,
       double: 0.5,
       continueChance: 0.72,
       stepGap: ()=>480+Math.random()*160,
@@ -612,13 +624,13 @@
     return out;
   }
   function synthCrickets(state){
-    const out = ctx.createGain(); out.gain.value = 0.55;
+    const out = ctx.createGain(); out.gain.value = 0.5;
     function voice(freq, rate){
       const osc = ctx.createOscillator(); osc.type='sine'; osc.frequency.value = freq;
       const trem = ctx.createGain(); trem.gain.value = 0.5;
       osc.connect(trem);
-      const l = ctx.createOscillator(); l.type='square'; l.frequency.value = rate;
-      const lg = ctx.createGain(); lg.gain.value = 0.5;
+      const l = ctx.createOscillator(); l.type='sine'; l.frequency.value = rate;
+      const lg = ctx.createGain(); lg.gain.value = 0.45;
       l.connect(lg); lg.connect(trem.gain);
       trem.connect(out);
       osc.start(); l.start();
@@ -626,16 +638,16 @@
     }
     voice(4600, 27);
     voice(4150, 23);
-    lfo(out.gain, 0.55, 0.4, 0.55, state);
+    lfo(out.gain, 0.55, 0.35, 0.55, state);
     return out;
   }
   function synthSnowWalk(state){
     const out = ctx.createGain(); out.gain.value = 1;
     scheduleWalking(out, state, {
       dur: ()=>0.14+Math.random()*0.1,
-      freq: ()=>2600+Math.random()*2600,
-      q: 1.4,
-      peak: ()=>0.5+Math.random()*0.2,
+      freq: ()=>2400+Math.random()*2200,
+      q: 0.9,
+      peak: ()=>0.46+Math.random()*0.18,
       double: 0.75,
       continueChance: 0.7,
       stepGap: ()=>560+Math.random()*180,
@@ -645,9 +657,9 @@
   }
   function synthFireplace(state){
     const out = ctx.createGain(); out.gain.value = 1;
-    const bed = ctx.createBufferSource(); bed.buffer = noiseBuffer(5); bed.loop = true;
+    const bed = ctx.createBufferSource(); bed.buffer = pinkNoiseBuffer(5); bed.loop = true;
     const lp = ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=500;
-    const bedGain = ctx.createGain(); bedGain.gain.value = 0.22;
+    const bedGain = ctx.createGain(); bedGain.gain.value = 0.28;
     bed.connect(lp); lp.connect(bedGain); bedGain.connect(out);
     bed.start(); state.nodes.push(bed);
     (function pop(){
@@ -657,7 +669,7 @@
       const src = ctx.createBufferSource(); src.buffer = noiseBuffer(dur);
       const hp = ctx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=2200+Math.random()*2000;
       const g = ctx.createGain(); g.gain.setValueAtTime(0, now);
-      g.gain.linearRampToValueAtTime(0.5+Math.random()*0.3, now+0.005);
+      g.gain.linearRampToValueAtTime(0.45+Math.random()*0.25, now+0.005);
       g.gain.exponentialRampToValueAtTime(0.0001, now+dur);
       src.connect(hp); hp.connect(g); g.connect(out);
       src.start(now); src.stop(now+dur+0.02);
@@ -665,40 +677,60 @@
     })();
     return out;
   }
+  function synthPageTurn(state){
+    // 가을: 책을 읽다 가끔 페이지를 넘기는 소리
+    const out = ctx.createGain(); out.gain.value = 1;
+    (function flip(){
+      if(state.stopped) return;
+      const now = ctx.currentTime;
+      const dur = 0.18+Math.random()*0.14;
+      const src = ctx.createBufferSource(); src.buffer = noiseBuffer(dur);
+      const bp = ctx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=2200+Math.random()*1600; bp.Q.value=0.5;
+      const g = ctx.createGain(); g.gain.setValueAtTime(0, now);
+      g.gain.linearRampToValueAtTime(0.35+Math.random()*0.2, now+0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, now+dur);
+      src.connect(bp); bp.connect(g); g.connect(out);
+      src.start(now); src.stop(now+dur+0.05);
+      setTimeout(flip, 3500+Math.random()*6500);
+    })();
+    return out;
+  }
 
   const SOUND_LIBRARY = {
-    rain:      { name:'봄비 소리',        max:0.55, vol:40, muted:false, synth:synthRain,
+    rain:      { name:'봄비 소리',        max:0.42, vol:35, muted:false, synth:synthRain,
       icon:'<path d="M8 13v4M12 15v4M16 13v4"/><path d="M7 10a4 4 0 0 1 1-7.9A5 5 0 0 1 18 3a3.5 3.5 0 0 1-1 6.9"/>' },
-    wind:      { name:'바람소리',         max:0.5,  vol:25, muted:false, synth:synthWind,
+    wind:      { name:'바람소리',         max:0.4,  vol:20, muted:false, synth:synthWind,
       icon:'<path d="M3 8h11a2.5 2.5 0 1 0-2.2-3.7"/><path d="M3 12h15a2.5 2.5 0 1 1-2.2 3.7"/><path d="M3 16h9"/>' },
-    birds:     { name:'새소리',           max:0.45, vol:20, muted:false, synth:synthBirds,
+    birds:     { name:'새소리',           max:0.4,  vol:18, muted:false, synth:synthBirds,
       icon:'<path d="M4 12c2-4 6-6 10-5-1-2 1-4 3-3-1 2 0 3 1 3-1 4-4 6-8 6-2 3-5 4-8 4 1-2 2-3 2-5z"/>' },
-    crickets:  { name:'풀벌레 소리',      max:0.35, vol:15, muted:false, synth:synthCrickets,
+    crickets:  { name:'풀벌레 소리',      max:0.3,  vol:12, muted:false, synth:synthCrickets,
       icon:'<circle cx="12" cy="13" r="4"/><path d="M9 9l-2-3M15 9l2-3M8 16l-3 2M16 16l3 2M12 9V6"/>' },
-    typhoon:   { name:'태풍/폭풍우 소리', max:0.85, vol:30, muted:false, synth:synthTyphoon,
+    typhoon:   { name:'태풍/폭풍우 소리', max:0.55, vol:25, muted:false, synth:synthTyphoon,
       icon:'<path d="M9 16h6l-2 6 6-9h-4l2-6-8 9z"/><path d="M7 15a4 4 0 0 1 1-7.9A5 5 0 0 1 18 8a3.5 3.5 0 0 1-1 6.9"/>' },
-    summerrain:{ name:'여름 소나기 소리', max:0.6, vol:35, muted:false, synth:synthSummerRain,
+    summerrain:{ name:'여름 소나기 소리', max:0.45, vol:30, muted:false, synth:synthSummerRain,
       icon:'<path d="M8 13v4M12 15v4M16 13v4"/><path d="M7 10a4 4 0 0 1 1-7.9A5 5 0 0 1 18 3a3.5 3.5 0 0 1-1 6.9"/>' },
-    thunder:   { name:'천둥소리',          max:0.9,  vol:15, muted:true,  synth:synthThunderSolo,
+    thunder:   { name:'천둥소리',          max:0.6,  vol:15, muted:true,  synth:synthThunderSolo,
       icon:'<path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/>' },
-    waves:     { name:'파도소리',         max:0.5,  vol:28, muted:false, synth:synthWaves,
+    waves:     { name:'파도소리',         max:0.4,  vol:24, muted:false, synth:synthWaves,
       icon:'<path d="M2 15c2-2 4-2 6 0s4 2 6 0 4-2 6 0"/><path d="M2 19c2-2 4-2 6 0s4 2 6 0 4-2 6 0"/>' },
-    cicadas:   { name:'매미소리',         max:0.4,  vol:18, muted:false, synth:synthCicadas,
+    cicadas:   { name:'매미소리',         max:0.32, vol:15, muted:false, synth:synthCicadas,
       icon:'<ellipse cx="12" cy="13" rx="2.2" ry="4"/><path d="M10 10c-3-3-6-3-8-1M14 10c3-3 6-3 8-1M10 16c-3 3-6 3-8 1M14 16c3 3 6 3 8 1"/>' },
-    leafwalk:  { name:'낙엽 밟는 소리',   max:0.6,  vol:22, muted:false, synth:synthLeafWalk,
+    leafwalk:  { name:'낙엽 밟는 소리',   max:0.5,  vol:20, muted:false, synth:synthLeafWalk,
       icon:'<path d="M12 3c5 1 8 5 6 11-4 2-9 0-10-5-1-3 1-5 4-6z"/><path d="M8 21c1-4 3-7 7-9"/>' },
-    snowwalk:  { name:'눈 밟는 소리',     max:0.6,  vol:22, muted:false, synth:synthSnowWalk,
+    pageturn:  { name:'책 넘기는 소리',   max:0.4,  vol:16, muted:false, synth:synthPageTurn,
+      icon:'<path d="M4 5c3-1 6-1 8 1v13c-2-2-5-2-8-1z"/><path d="M20 5c-3-1-6-1-8 1v13c2-2 5-2 8-1z"/>' },
+    snowwalk:  { name:'눈 밟는 소리',     max:0.5,  vol:20, muted:false, synth:synthSnowWalk,
       icon:'<ellipse cx="12" cy="15" rx="3.6" ry="5.6"/><circle cx="9.3" cy="7" r="1.2"/><circle cx="11.6" cy="5.4" r="1.2"/><circle cx="14" cy="5.6" r="1.2"/><circle cx="16" cy="7.4" r="1.2"/>' },
-    fireplace: { name:'벽난로 타는 소리', max:0.5,  vol:18, muted:false, synth:synthFireplace,
+    fireplace: { name:'벽난로 타는 소리', max:0.4,  vol:16, muted:false, synth:synthFireplace,
       icon:'<path d="M12 3c3 4 6 6 6 10a6 6 0 0 1-12 0c0-2 1-3 2-4-.5 2 .5 3 1.5 2.5C8 9 9 6 12 3z"/>' }
   };
 
   const SEASON_SOUNDS = {
     spring: ['rain','birds','crickets','wind'],
     summer: ['typhoon','summerrain','thunder','waves','cicadas','wind'],
-    autumn: ['leafwalk','wind','crickets','birds'],
+    autumn: ['leafwalk','pageturn','wind','crickets','birds'],
     winter: ['snowwalk','wind','fireplace'],
-    all: ['rain','wind','birds','crickets','typhoon','summerrain','thunder','waves','cicadas','leafwalk','snowwalk','fireplace']
+    all: ['rain','wind','birds','crickets','typhoon','summerrain','thunder','waves','cicadas','leafwalk','pageturn','snowwalk','fireplace']
   };
 
   const trackList = document.getElementById('trackList');
@@ -723,7 +755,7 @@
     const def = SOUND_LIBRARY[id];
     const gainNode = ctx.createGain();
     gainNode.gain.value = def.muted ? 0 : (def.vol/100)*def.max;
-    gainNode.connect(ctx.destination);
+    gainNode.connect(masterBus);
     const state = { stopped:false, nodes:[] };
     const synthOut = def.synth(state);
     synthOut.connect(gainNode);
@@ -825,6 +857,19 @@
     if(ctx) return;
     ctx = new (window.AudioContext||window.webkitAudioContext)();
     ctx.resume();
+    // 마스터 버스: 여러 소리를 섞어도 찢어지지 않도록 완만하게 다듬고, 고음을 살짝 눌러 부드럽게
+    const compressor = ctx.createDynamicsCompressor();
+    compressor.threshold.value = -20;
+    compressor.knee.value = 22;
+    compressor.ratio.value = 3;
+    compressor.attack.value = 0.008;
+    compressor.release.value = 0.3;
+    const warmth = ctx.createBiquadFilter();
+    warmth.type = 'lowpass'; warmth.frequency.value = 9000;
+    compressor.connect(warmth);
+    warmth.connect(ctx.destination);
+    masterBus = compressor;
+
     SEASON_SOUNDS[currentSeason].forEach(id=>startNode(id));
     document.getElementById('startGate').classList.add('hide');
     document.getElementById('app').classList.add('show');
@@ -839,9 +884,14 @@
     breathLabel.textContent = breathIn ? '들이쉬고' : '내쉬고';
   }, 4500);
 
-  /* ================= 유튜브 IFrame API ================= */
-  let ytPlayer = null, ytReady = false, pendingVideoId = null, ytPlaying = false;
-  window.onYouTubeIframeAPIReady = function(){ ytReady = true; if(pendingVideoId) createYtPlayer(pendingVideoId); };
+  /* ================= 유튜브 다중 트랙 믹서 ================= */
+  let ytApiReady = false;
+  const pendingYtCreations = [];
+  window.onYouTubeIframeAPIReady = function(){
+    ytApiReady = true;
+    pendingYtCreations.forEach(fn=>fn());
+    pendingYtCreations.length = 0;
+  };
   const ytScript = document.createElement('script');
   ytScript.src = 'https://www.youtube.com/iframe_api';
   document.head.appendChild(ytScript);
@@ -850,41 +900,100 @@
     const m = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([a-zA-Z0-9_-]{11})/);
     return m ? m[1] : null;
   }
-  function createYtPlayer(id){
-    ytPlayer = new YT.Player('yt-player', {
-      height:'1', width:'1', videoId:id,
-      playerVars:{ autoplay:1, controls:0, loop:1, playlist:id },
-      events:{
-        onReady:(e)=>{ e.target.setVolume(+document.getElementById('ytVolume').value); e.target.playVideo(); ytPlaying=true; updateYtIcon(); }
-      }
-    });
-  }
-  document.getElementById('ytApply').onclick = ()=>{
-    const url = document.getElementById('ytUrl').value.trim();
-    const id = extractYoutubeId(url);
-    if(!id){ document.getElementById('ytUrl').placeholder = '올바른 유튜브 링크가 아니에요'; return; }
-    document.getElementById('ytControls').classList.add('open');
-    if(ytPlayer && ytPlayer.loadVideoById){
-      ytPlayer.loadVideoById(id);
-      ytPlaying = true; updateYtIcon();
-    } else if(ytReady){
-      createYtPlayer(id);
-    } else {
-      pendingVideoId = id;
+
+  const ytTracks = {};
+  let ytTrackSeq = 0;
+  const ytUrlInput = document.getElementById('ytUrl');
+  const ytTrackList = document.getElementById('ytTrackList');
+  const ytIcon = '<circle cx="12" cy="12" r="9"/><path d="M10 15V9l6 3-6 3z"/>';
+
+  function addYoutubeTrack(url){
+    const videoId = extractYoutubeId(url);
+    if(!videoId){ ytUrlInput.placeholder = '올바른 유튜브 링크가 아니에요'; return; }
+    const trackId = 'yt' + (++ytTrackSeq);
+    const hostId = 'ytHost_' + trackId;
+    const host = document.createElement('div');
+    host.id = hostId;
+    host.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;bottom:0;left:0;';
+    document.body.appendChild(host);
+
+    ytTracks[trackId] = { videoId, player:null, vol:50, muted:false, hostId, name:'유튜브 트랙' };
+
+    const wrap = document.createElement('div');
+    wrap.innerHTML = `
+      <div class="track" data-yt-id="${trackId}">
+        <button class="muteBtn on" title="켜기/끄기">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">${ytIcon}</svg>
+        </button>
+        <div class="trackBody">
+          <div class="trackName">유튜브 트랙</div>
+          <input type="range" min="0" max="100" value="50" class="volSlider">
+        </div>
+        <button class="ytRemove" title="삭제">✕</button>
+      </div>
+    `;
+    ytTrackList.appendChild(wrap);
+
+    const muteBtn = wrap.querySelector('.muteBtn');
+    const volSlider = wrap.querySelector('.volSlider');
+    const nameEl = wrap.querySelector('.trackName');
+    const removeBtn = wrap.querySelector('.ytRemove');
+
+    function applyVolume(){
+      const t = ytTracks[trackId];
+      if(!t.player || !t.player.setVolume) return;
+      t.player.setVolume(t.muted ? 0 : t.vol);
     }
-  };
-  document.getElementById('ytVolume').oninput = function(){
-    if(ytPlayer && ytPlayer.setVolume) ytPlayer.setVolume(+this.value);
-  };
-  function updateYtIcon(){
-    document.getElementById('ytPlayIcon').outerHTML = ytPlaying
-      ? '<svg id="ytPlayIcon" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg>'
-      : '<svg id="ytPlayIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+    muteBtn.onclick = ()=>{
+      const t = ytTracks[trackId];
+      t.muted = !t.muted;
+      muteBtn.classList.toggle('on', !t.muted);
+      applyVolume();
+    };
+    volSlider.oninput = ()=>{
+      ytTracks[trackId].vol = +volSlider.value;
+      applyVolume();
+    };
+    removeBtn.onclick = ()=>{
+      const t = ytTracks[trackId];
+      if(t.player && t.player.destroy){ try{ t.player.destroy(); }catch(e){} }
+      const h = document.getElementById(t.hostId);
+      if(h) h.remove();
+      delete ytTracks[trackId];
+      wrap.remove();
+    };
+
+    const create = ()=>{
+      const player = new YT.Player(hostId, {
+        height:'1', width:'1', videoId,
+        playerVars:{ autoplay:1, controls:0, loop:1, playlist:videoId },
+        events:{
+          onReady:(e)=>{
+            const t = ytTracks[trackId];
+            if(!t) return;
+            t.player = e.target;
+            e.target.setVolume(t.vol);
+            e.target.playVideo();
+            try{
+              const data = e.target.getVideoData();
+              if(data && data.title){
+                t.name = data.title;
+                nameEl.textContent = data.title;
+              }
+            }catch(err){}
+          }
+        }
+      });
+    };
+    if(ytApiReady) create(); else pendingYtCreations.push(create);
   }
-  document.getElementById('ytPlayPause').onclick = ()=>{
-    if(!ytPlayer) return;
-    if(ytPlaying){ ytPlayer.pauseVideo(); ytPlaying=false; } else { ytPlayer.playVideo(); ytPlaying=true; }
-    updateYtIcon();
+
+  document.getElementById('ytApply').onclick = ()=>{
+    const url = ytUrlInput.value.trim();
+    if(!url) return;
+    addYoutubeTrack(url);
+    ytUrlInput.value = '';
+    ytUrlInput.placeholder = 'https://www.youtube.com/watch?v=...';
   };
 
   /* ================= 수면 모드 ================= */
